@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: ai-resume-neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "password", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: ai-resume-chromadb
+    ports:
+      - "8000:8000"
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_PORT=8000
+      - CHROMA_SERVER_CORS_ALLOW_ORIGINS=http://localhost:5173
+    volumes:
+      - chromadb-data:/chroma/.chroma
+
+volumes:
+  neo4j-data:
+  neo4j-logs:
+
+  chromadb-data:
+
