@@ -15,6 +15,7 @@
 
 import express from 'express';
 import { z } from 'zod';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 import { createJob, getJob, getAllJobs, deleteJob } from '../services/neo4j/jobService.js';
 import { findTopMatches } from '../services/matchingService.js';
 import { explainMatch } from '../services/ai/matchExplainer.js';
@@ -47,10 +48,8 @@ const StatusSchema = z.object({
 
 // ─── CRUD ────────────────────────────────────────────────────────────────────
 
-/**
- * POST /api/jobs — create a job posting with GPT skill extraction
- */
-router.post('/', async (req, res, next) => {
+/** POST /api/jobs — create new job */
+router.post('/', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     // Validate with Zod before touching any service
     const parsed = CreateJobSchema.safeParse(req.body);
@@ -69,7 +68,7 @@ router.post('/', async (req, res, next) => {
 });
 
 /** GET /api/jobs — all jobs, newest first */
-router.get('/', async (req, res, next) => {
+router.get('/', requireAuth, async (req, res, next) => {
   try {
     res.json(await getAllJobs());
   } catch (error) {
@@ -78,7 +77,7 @@ router.get('/', async (req, res, next) => {
 });
 
 /** GET /api/jobs/:id — single job with skills */
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', requireAuth, async (req, res, next) => {
   try {
     const job = await getJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
@@ -93,7 +92,7 @@ router.get('/:id', async (req, res, next) => {
  * Removes the job node + all REQUIRES_SKILL relationships via DETACH DELETE.
  * Returns 204 No Content on success.
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     const deleted = await deleteJob(req.params.id);
     if (!deleted) return res.status(404).json({ error: 'Job not found' });
@@ -109,7 +108,7 @@ router.delete('/:id', async (req, res, next) => {
  * GET /api/jobs/:id/matches?top=N
  * Runs hybrid matching (graph 60% + vector 40%) for the given job.
  */
-router.get('/:id/matches', async (req, res, next) => {
+router.get('/:id/matches', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     const topN = parseInt(req.query.top as string) || 10;
     const matches = await findTopMatches(req.params.id, topN);
@@ -126,7 +125,7 @@ router.get('/:id/matches', async (req, res, next) => {
  * Generates AI evaluation: strengths, gaps, interview questions.
  * matchedSkills and missingSkills passed as comma-separated query params.
  */
-router.get('/:id/matches/:resumeId/explain', async (req, res, next) => {
+router.get('/:id/matches/:resumeId/explain', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     const { id: jobId, resumeId } = req.params;
     const matchedSkills = req.query.matchedSkills
@@ -148,7 +147,7 @@ router.get('/:id/matches/:resumeId/explain', async (req, res, next) => {
  * GET /api/jobs/:id/gap-plan/:resumeId
  * Generates a week-by-week learning roadmap for the candidate's missing skills.
  */
-router.get('/:id/gap-plan/:resumeId', async (req, res, next) => {
+router.get('/:id/gap-plan/:resumeId', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     const { id: jobId, resumeId } = req.params;
     const [job, resume] = await Promise.all([getJob(jobId), getResume(resumeId)]);
@@ -172,7 +171,7 @@ router.get('/:id/gap-plan/:resumeId', async (req, res, next) => {
  * Creates or updates the (Resume)-[:APPLIED_TO {status}]->(Job) relationship.
  * Body: { status: 'reviewing' | 'shortlisted' | 'interviewing' | 'rejected' | 'offered' }
  */
-router.patch('/:id/matches/:resumeId/status', async (req, res, next) => {
+router.patch('/:id/matches/:resumeId/status', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     const { id: jobId, resumeId } = req.params;
 
@@ -197,7 +196,7 @@ router.patch('/:id/matches/:resumeId/status', async (req, res, next) => {
  * Returns all candidate statuses for this job as a map: { resumeId → status }
  * Fetched alongside match results so card badges are populated in one request.
  */
-router.get('/:id/statuses', async (req, res, next) => {
+router.get('/:id/statuses', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     const statuses = await getApplicationStatuses(req.params.id);
     res.json(statuses);

@@ -23,6 +23,8 @@ import {
   getConversationHistory,
 } from '../services/chat/ragChatService.js';
 
+import { requireAuth } from '../middleware/auth.js';
+
 const router = express.Router();
 
 // ─── Zod Validation ────────────────────────────────────────────────────────────
@@ -48,7 +50,7 @@ const ChatBodySchema = z.object({
  * Body: { message: string, sessionId?: string }
  * Returns: { response: string, sessionId: string }
  */
-router.post('/:resumeId', async (req, res, next) => {
+router.post('/:resumeId', requireAuth, async (req, res, next) => {
   try {
     const parsed = ChatBodySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -81,7 +83,7 @@ router.post('/:resumeId', async (req, res, next) => {
  *   { type: 'done' }                       — stream complete
  *   { type: 'error',   message: '...' }    — on failure
  */
-router.post('/:resumeId/stream', async (req, res, next) => {
+router.post('/:resumeId/stream', requireAuth, async (req, res, next) => {
   const parsed = ChatBodySchema.safeParse(req.body);
   if (!parsed.success) {
     // Can't use SSE error format here (headers not set yet) — use plain JSON
@@ -105,7 +107,7 @@ router.post('/:resumeId/stream', async (req, res, next) => {
  *
  * Note: History is currently in-memory. Upgrade path: Redis with TTL.
  */
-router.get('/:resumeId/history/:sessionId', async (req, res, next) => {
+router.get('/:resumeId/history/:sessionId', requireAuth, async (req, res, next) => {
   try {
     const { sessionId } = req.params;
     const history = getConversationHistory(sessionId);

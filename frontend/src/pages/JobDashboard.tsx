@@ -28,8 +28,10 @@ import { Link } from 'react-router-dom';
 import { Plus, Briefcase, Trash2 } from 'lucide-react';
 import { jobApi, type Job } from '../services/api';
 import JobForm from '../components/JobForm';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function JobDashboard() {
+  const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -106,20 +108,22 @@ export default function JobDashboard() {
     <div className="px-4 py-6">
       {/* ── Page Header ────────────────────────────────────────────────── */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Job Postings</h1>
+        <h1 className="text-3xl font-bold text-gray-900">{user?.role === 'CANDIDATE' ? 'Available Jobs' : 'Job Postings'}</h1>
         {/* Toggle button — shows/hides the inline JobForm */}
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus className="mr-2 h-5 w-5" />
-          New Job
-        </button>
+        {user?.role === 'RECRUITER' && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+          >
+            <Plus className="mr-2 h-5 w-5" />
+            New Job
+          </button>
+        )}
       </div>
       
       {/* ── Inline Job Creation Form ────────────────────────────────────── */}
       {/* Conditionally rendered based on showForm state */}
-      {showForm && (
+      {showForm && user?.role === 'RECRUITER' && (
         <div className="mb-6">
           {/* Callback props: JobForm reports back to this parent component */}
           <JobForm onSuccess={handleJobCreated} onCancel={() => setShowForm(false)} />
@@ -131,8 +135,8 @@ export default function JobDashboard() {
         // Empty state — shown when no jobs have been created yet
         <div className="text-center py-12">
           <Briefcase className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No jobs</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by creating a new job posting.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No jobs posted yet</h3>
+          {user?.role === 'RECRUITER' && <p className="mt-1 text-sm text-gray-500">Get started by creating a new job posting.</p>}
         </div>
       ) : (
         // Responsive grid: 1 column on mobile, 2 on medium, 3 on large screens
@@ -156,12 +160,6 @@ export default function JobDashboard() {
                 )}
               </div>
               {/* Delete button — top-right corner, visible on hover */}
-              <button
-                onClick={(e) => handleDeleteJob(e, job)}
-                disabled={deleting === job.id}
-                className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-40"
-                title="Delete job"
-              >
                 <Trash2 className="h-4 w-4" />
               </button>
             </Link>

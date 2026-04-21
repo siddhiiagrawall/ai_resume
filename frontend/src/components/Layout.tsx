@@ -18,69 +18,96 @@
  *  (blue underline + blue text vs grey text for inactive links).
  */
 
-import { Link, useLocation } from 'react-router-dom';
-import { Briefcase, Upload, Home, Users } from 'lucide-react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Briefcase, Upload, Users, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
-interface LayoutProps {
-  children: React.ReactNode; // The page component rendered by the active route
-}
+export default function Layout() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-export default function Layout({ children }: LayoutProps) {
-  // useLocation() returns the current URL — re-runs whenever the route changes
-  const location = useLocation();
-  
-  // Returns true if the current URL path exactly matches the given path
-  // Used to apply active styles to the correct nav link
-  const isActive = (path: string) => location.pathname === path;
-  
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ── Navigation Bar ──────────────────────────────────────────────── */}
-      <nav className="bg-white shadow-sm border-b">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* ─── Navigation Bar ─── */}
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-10 w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex">
-              {/* Logo / Brand link — always navigates to home */}
-              <Link to="/" className="flex items-center px-2 py-2 text-xl font-bold text-blue-600">
-                <Briefcase className="mr-2 h-6 w-6" />
-                AI Resume Platform
-              </Link>
-
-              {/* Nav links — hidden on mobile (sm:flex shows them on larger screens) */}
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                {/* Jobs link — active when on the root route */}
-                <Link
-                  to="/"
-                  className={`inline-flex items-center px-1 pt-1 text-sm font-medium ${
-                    isActive('/') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Home className="mr-1 h-4 w-4" />
-                  Jobs
-                </Link>
-
-                {/* Upload Resume link */}
-                <Link
-                  to="/upload"
-                  className={`inline-flex items-center px-1 pt-1 text-sm font-medium ${
-                    isActive('/upload') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Upload className="mr-1 h-4 w-4" />
-                  Upload Resume
-                </Link>
-
-                {/* Resumes browser link */}
-                <Link
-                  to="/resumes"
-                  className={`inline-flex items-center px-1 pt-1 text-sm font-medium ${
-                    isActive('/resumes') ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Users className="mr-1 h-4 w-4" />
-                  Resumes
-                </Link>
+            <div className="flex space-x-8">
+              {/* Logo / Brand */}
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <Briefcase className="h-6 w-6 text-blue-600" />
+                <span className="font-bold text-xl text-blue-600 tracking-tight">
+                  AI Resume Platform
+                </span>
               </div>
+
+              {/* Links */}
+              <div className="hidden sm:-my-px sm:ml-6 sm:flex sm:space-x-8">
+                <NavLink
+                  to="/"
+                  className={({ isActive }) =>
+                    `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'border-blue-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`
+                  }
+                >
+                  <Briefcase className="w-4 h-4 mr-2" />
+                  Jobs
+                </NavLink>
+
+                {user?.role === 'CANDIDATE' && (
+                  <NavLink
+                    to="/upload"
+                    className={({ isActive }) =>
+                      `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'border-blue-500 text-gray-900'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`
+                    }
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Upload Resume
+                  </NavLink>
+                )}
+
+                {user?.role === 'RECRUITER' && (
+                  <NavLink
+                    to="/resumes"
+                    className={({ isActive }) =>
+                      `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'border-blue-500 text-gray-900'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`
+                    }
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    Resumes
+                  </NavLink>
+                )}
+              </div>
+            </div>
+            
+            {/* User Profile & Logout */}
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-gray-700 hidden sm:block">
+                {user?.name} <span className="text-gray-400 font-normal">({user?.role})</span>
+              </span>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-700 transition"
+              >
+                <LogOut className="w-4 h-4 mr-1" />
+                Logout
+              </button>
             </div>
           </div>
         </div>

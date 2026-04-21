@@ -1,27 +1,5 @@
-/**
- * App.tsx — Root Application Component & Client-Side Routing
- *
- * This is the top-level component rendered by main.tsx.
- * Its only job is to set up the routing structure — it doesn't contain UI itself.
- *
- * Client-Side Routing (React Router v6):
- *  In a traditional multi-page app, navigating to /jobs/123 would send a new HTTP
- *  request to the server. In a Single Page Application (SPA), React Router
- *  intercepts navigation and SWAPS components in the DOM without a full reload.
- *  This makes navigation feel instant.
- *
- * Route structure:
- *   /             → JobDashboard  (list of all job postings)
- *   /jobs/:id     → JobDetail     (single job + its best-matching resumes)
- *   /upload       → ResumeUpload  (upload a PDF/TXT resume)
- *   /chat/:resumeId → ResumeChat  (AI Q&A about a specific resume)
- *
- * Layout wrapper:
- *  All pages are wrapped in <Layout>, which adds the shared navigation bar.
- *  The nav bar doesn't re-render on route changes — only the <children> inside it do.
- */
-
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import JobDashboard from './pages/JobDashboard';
 import JobDetail from './pages/JobDetail';
@@ -29,36 +7,46 @@ import ResumeUpload from './pages/ResumeUpload';
 import ResumeChat from './pages/ResumeChat';
 import ResumeList from './pages/ResumeList';
 import ResumeDetail from './pages/ResumeDetail';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+function PrivateRoute({ children, role }: { children: React.ReactNode, role?: 'RECRUITER' | 'CANDIDATE' }) {
+  const { user, isLoading } = useAuth();
+  
+  if (isLoading) return <div className="p-8 text-center">Loading...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (role && user.role !== role) return <Navigate to="/" replace />;
+  
+  return <>{children}</>;
+}
 
 function App() {
   return (
-    // BrowserRouter — uses the HTML5 History API (pushState) for clean URLs
-    // Alternative: HashRouter uses /#/route URLs (no server config needed)
-    <Router>
-      {/* Layout wraps every page — contains the nav bar */}
-      <Layout>
+    <AuthProvider>
+      <Router>
         <Routes>
-          {/* Exact match for root — shows the job listing dashboard */}
-          <Route path="/" element={<JobDashboard />} />
-
-          {/* Dynamic segment :id — e.g., /jobs/abc-123-def */}
-          {/* useParams() in JobDetail reads this :id value */}
-          <Route path="/jobs/:id" element={<JobDetail />} />
-
-          {/* Resume upload form — POST /api/resumes */}
-          <Route path="/upload" element={<ResumeUpload />} />
-
-          {/* Browse all uploaded resumes */}
-          <Route path="/resumes" element={<ResumeList />} />
-
-          {/* Full candidate profile — quality score, work history, education, skills */}
-          <Route path="/resumes/:id" element={<ResumeDetail />} />
-
-          {/* Resume-specific chat — :resumeId scopes the AI to one candidate */}
-          <Route path="/chat/:resumeId" element={<ResumeChat />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          
+          <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+            <Route index element={<JobDashboard />} />
+            <Route path="jobs/:id" element={<JobDetail />} />
+            <Route path="upload" element={<ResumeUpload />} />
+            <Route 
+              path="resumes" 
+              element={
+                <PrivateRoute role="RECRUITER">
+                  <ResumeList />
+                </PrivateRoute>
+              } 
+            />
+            <Route path="resumes/:id" element={<ResumeDetail />} />
+            <Route path="chat/:resumeId" element={<ResumeChat />} />
+          </Route>
         </Routes>
-      </Layout>
-    </Router>
+      </Router>
+    </AuthProvider>
   );
 }
 

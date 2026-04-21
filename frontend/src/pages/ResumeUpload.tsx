@@ -46,8 +46,10 @@ function ScoreBar({ label, score, max = 25 }: { label: string; score: number; ma
 export default function ResumeUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pollInterval, setPollInterval] = useState<any>(null);
+  const [progressMsg, setProgressMsg] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState<Resume | null>(null);
+  const [success, setSuccess] = useState<any | null>(null);
   const navigate = useNavigate();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,13 +72,42 @@ export default function ResumeUpload() {
     try {
       setLoading(true);
       setError('');
-      const resume = await resumeApi.upload(file);
-      setSuccess(resume);
-      // Auto-redirect after 8s — longer to give user time to read the score report
-      setTimeout(() => navigate('/'), 8000);
+      setProgressMsg('Uploading and parsing text...');
+      const response = await resumeApi.upload(file);
+      
+      const { id } = response;
+      setProgressMsg('Extracting profile via AI in background...');
+
+      // Start polling
+      const iv = setInterval(async () => {
+        try {
+          const res = await fetch(`http://localhost:3001/api/resumes/status/${id}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          const json = await res.json();
+          if (json.status === 'COMPLETED') {
+            clearInterval(iv);
+            
+            // Get final full profile
+            const fullResume = await resumeApi.getById(id);
+            setSuccess(fullResume);
+            setLoading(false);
+            
+            setTimeout(() => navigate('/'), 8000);
+          } else if (json.status === 'FAILED') {
+            clearInterval(iv);
+            setError('Resume processing failed.');
+            setLoading(false);
+          }
+        } catch (err) {
+          console.error('Polling error', err);
+        }
+      }, 2000);
+
+      setPollInterval(iv);
+
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to upload resume');
-    } finally {
+      setError(err.message || 'Failed to upload resume');
       setLoading(false);
     }
   };
@@ -193,57 +224,59 @@ export default function ResumeUpload() {
             </label>
             <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors">
               <div className="space-y-1 text-center">
-                {file ? (
-                  <div className="flex items-center justify-center">
-                    <FileText className="h-12 w-12 text-blue-500" />
-                    <div className="ml-4 text-left">
-                      <p className="text-sm font-medium text-gray-900">{file.name}</p>
-                      <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(2)} KB</p>
-                    </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <h2 className="text-xl font-bold text-gray-900 border-b pb-2 mb-6">Upload New Resume</h2>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Resume Document (PDF or TXT)
+              </label>
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                <div className="space-y-1 text-center">
+                  <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                  <div className="flex text-sm text-gray-600 justify-center">
+                    <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 p-1">
+                      <span>Select a file</span>
+                      <input type="file" className="sr-only" onChange={handleFileChange} accept=".pdf,.txt" />
+                    </label>
                   </div>
-                ) : (
-                  <>
-                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                    <div className="flex text-sm text-gray-600 justify-center">
-                      <label htmlFor="resume" className="cursor-pointer font-medium text-blue-600 hover:text-blue-500">
-                        <span>Upload a file</span>
-                        <input id="resume" name="resume" type="file" className="sr-only" accept=".pdf,.txt" onChange={handleFileChange} />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
-                    </div>
-                    <p className="text-xs text-gray-500">PDF, TXT up to 10MB</p>
-                    <p className="text-xs text-blue-600 mt-1">✨ AI will score your resume quality on upload</p>
-                  </>
-                )}
+                  <p className="text-xs text-gray-500">Only PDF or TXT up to 10MB</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {file && (
-            <button type="button" onClick={() => setFile(null)} className="mb-4 text-sm text-red-600 hover:text-red-700">
-              Remove file
-            </button>
-          )}
-
-          {error && (
-            <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3">{error}</div>
-          )}
-
-          <button
-            type="submit"
-            disabled={!file || loading}
-            className="w-full flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Analyzing & Uploading...
-              </>
-            ) : (
-              'Upload & Score Resume'
+            {file && (
+              <div className="flex items-center p-3 text-sm bg-blue-50 border border-blue-200 text-blue-700 rounded-md">
+                <FileText className="w-4 h-4 mr-2 text-blue-500" />
+                <span className="font-medium truncate">{file.name}</span>
+              </div>
             )}
-          </button>
-        </form>
+
+            {error && (
+              <div className="text-red-600 text-sm p-3 bg-red-50 border border-red-200 rounded-md">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || !file}
+              className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  {progressMsg}
+                </span>
+              ) : (
+                'Upload & Analyze Resume'
+              )}
+            </button>
+          </form>
+        </div>
       )}
     </div>
   );

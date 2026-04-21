@@ -25,9 +25,20 @@ services:
     volumes:
       - chromadb-data:/chroma/.chroma
 
+  redis:
+    image: redis:7-alpine
+    container_name: ai-resume-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
 volumes:
   neo4j-data:
   neo4j-logs:
 
   chromadb-data:
+
+  redis-data:
 

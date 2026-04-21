@@ -88,9 +88,17 @@ export async function initializeSchema() {
     await session.run(`CREATE INDEX resume_id IF NOT EXISTS FOR (r:Resume) ON (r.id)`);
 
     // Shared entity name indexes (critical for MERGE performance)
-    await session.run(`CREATE INDEX skill_name IF NOT EXISTS FOR (s:Skill) ON (s.name)`);
-    await session.run(`CREATE INDEX company_name IF NOT EXISTS FOR (c:Company) ON (c.name)`);
-    await session.run(`CREATE INDEX institution_name IF NOT EXISTS FOR (i:Institution) ON (i.name)`);
+    const constraints = [
+      'CREATE CONSTRAINT IF NOT EXISTS FOR (r:Resume) REQUIRE r.id IS UNIQUE',
+      'CREATE CONSTRAINT IF NOT EXISTS FOR (j:Job) REQUIRE j.id IS UNIQUE',
+      'CREATE CONSTRAINT IF NOT EXISTS FOR (c:Company) REQUIRE c.name IS UNIQUE',
+      'CREATE CONSTRAINT IF NOT EXISTS FOR (s:Skill) REQUIRE s.name IS UNIQUE',
+      'CREATE CONSTRAINT IF NOT EXISTS FOR (i:Institution) REQUIRE i.name IS UNIQUE',
+      'CREATE CONSTRAINT IF NOT EXISTS FOR (u:User) REQUIRE u.email IS UNIQUE',
+    ];
+    for (const constraint of constraints) {
+      await session.run(constraint);
+    }
 
     console.log('✅ Neo4j schema initialized (5 indexes)');
   } catch (error) {

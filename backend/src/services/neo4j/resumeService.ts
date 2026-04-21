@@ -49,6 +49,7 @@ export interface Resume {
   education: Education[];
   qualityScore?: number;    // Resume quality score (0-100), set by resumeScorer
   createdAt: string;
+  status?: string; // e.g., 'QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED'
 }
 
 // ─── Write Operations ─────────────────────────────────────────────────────────
@@ -80,12 +81,9 @@ export async function createResume(
   const id = uuidv4();
 
   try {
-    // One GPT call extracts all three data types simultaneously
-    // Single call is ~2x faster than three sequential calls
     const profile = await extractFullProfile(text);
     const { skills, companies, education } = profile;
 
-    // ── Create Resume node ──────────────────────────────────────────────────
     await session.run(
       `CREATE (r:Resume {
         id: $id,
@@ -93,76 +91,127 @@ export async function createResume(
         fileUrl: $fileUrl,
         text: $text,
         qualityScore: $qualityScore,
-        createdAt: datetime()
+        createdAt: datetime(),
+        status: 'COMPLETED'
       })`,
       {
         id,
         name,
         fileUrl,
-        // Text truncated for Neo4j storage — full text lives in ChromaDB vector chunks
         text: text.substring(0, 10000),
         qualityScore: qualityScore ?? null,
       }
     );
 
-    // ── Skills → HAS_SKILL relationships ───────────────────────────────────
-    // MERGE skill: one "Python" node for the entire graph (shared across all resumes)
-    for (const skill of skills) {
-      await session.run(
-        `MATCH (r:Resume {id: $resumeId})
-         MERGE (s:Skill {name: $skill})
-         CREATE (r)-[:HAS_SKILL]->(s)`,
-        { resumeId: id, skill }
-      );
-    }
-
-    // ── Companies → WORKED_AT relationships ────────────────────────────────
-    // Relationship properties (role, durationYears) live ON THE EDGE, not the node
-    // This allows: "Google worked at by 5 candidates in different roles"
-    for (const company of companies) {
-      await session.run(
-        `MATCH (r:Resume {id: $resumeId})
-         MERGE (c:Company {name: $name})
-         CREATE (r)-[:WORKED_AT {role: $role, durationYears: $durationYears}]->(c)`,
-        {
-          resumeId: id,
-          name: company.name,
-          role: company.role || 'Unknown',
-          durationYears: company.durationYears || 0,
-        }
-      );
-    }
-
-    // ── Education → HAS_DEGREE relationships ───────────────────────────────
-    // Degree and field stored on the RELATIONSHIP (not on Institution node)
-    // Institution node is just a name — the credential details vary per person
-    for (const edu of education) {
-      await session.run(
-        `MATCH (r:Resume {id: $resumeId})
-         MERGE (inst:Institution {name: $institution})
-         CREATE (r)-[:HAS_DEGREE {degree: $degree, field: $field}]->(inst)`,
-        {
-          resumeId: id,
-          institution: edu.institution || 'Unknown',
-          degree: edu.degree || 'Unknown',
-          field: edu.field || 'Unknown',
-        }
-      );
-    }
+    await createRelationships(session, id, skills, companies, education);
 
     return {
       id,
       name,
       fileUrl,
       text,
+      qualityScore,
       skills,
       companies,
       education,
-      qualityScore,
       createdAt: new Date().toISOString(),
+      status: 'COMPLETED'
     };
   } finally {
-    await session.close(); // Always return connection to pool
+    await session.close();
+  }
+}
+
+/** Helper function to create all resume graph relationships in a given session */
+async function createRelationships(session: any, resumeId: string, skills: string[], companies: Company[], education: Education[]) {
+  for (const skill of skills) {
+    await session.run(
+      `MATCH (r:Resume {id: $resumeId})
+       MERGE (s:Skill {name: $skill})
+       CREATE (r)-[:HAS_SKILL]->(s)`,
+      { resumeId, skill }
+    );
+  }
+
+  for (const company of companies) {
+    await session.run(
+      `MATCH (r:Resume {id: $resumeId})
+       MERGE (c:Company {name: $name})
+       CREATE (r)-[:WORKED_AT {role: $role, durationYears: $durationYears}]->(c)`,
+      {
+        resumeId,
+        name: company.name,
+        role: company.role || 'Unknown',
+        durationYears: company.durationYears || 0,
+      }
+    );
+  }
+
+  for (const edu of education) {
+    await session.run(
+      `MATCH (r:Resume {id: $resumeId})
+       MERGE (i:Institution {name: $institution})
+       CREATE (r)-[:HAS_DEGREE {degree: $degree, field: $field}]->(i)`,
+      {
+        resumeId,
+        institution: edu.institution || 'Unknown',
+        degree: edu.degree || 'Unknown',
+        field: edu.field || 'Unknown',
+      }
+    );
+  }
+}
+
+/**
+ * createPendingResume - creates a stub node immediately for the background queue.
+ */
+export async function createPendingResume(name: string, fileUrl: string, text: string): Promise<string> {
+  const session = driver.session();
+  const id = uuidv4();
+  try {
+    await session.run(
+      `CREATE (r:Resume {
+        id: $id,
+        name: $name,
+        fileUrl: $fileUrl,
+        text: $text,
+        createdAt: datetime(),
+        status: 'QUEUED'
+      })`,
+      { id, name, fileUrl, text: text.substring(0, 10000) }
+    );
+    return id;
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * updateResumeStatus - updates the processing status and optionally the score
+ */
+export async function updateResumeStatus(id: string, status: string, qualityScore?: number) {
+  const session = driver.session();
+  try {
+    await session.run(
+      `MATCH (r:Resume {id: $id}) 
+       SET r.status = $status, r.qualityScore = coalesce($qualityScore, r.qualityScore)`,
+      { id, status, qualityScore: qualityScore ?? null }
+    );
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * updateResumeConnections - runs the actual extraction in the background and builds graph.
+ */
+export async function updateResumeConnections(id: string, profile: { skills: string[], companies: Company[], education: Education[] }) {
+  const session = driver.session();
+  try {
+    const { skills, companies, education } = profile;
+    await createRelationships(session, id, skills, companies, education);
+  } finally {
+    await session.close();
   }
 }
 

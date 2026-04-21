@@ -21,7 +21,11 @@ import { testConnection, initializeSchema } from './config/neo4j.js';
 import { initializeChroma } from './config/chroma.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
+// Import workers to start them on backend launch
+import './workers/resumeQueue.js';
+
 // Load environment variables from .env file BEFORE anything else reads process.env
+// ESM (ES Modules) doesn't have __dirname — we reconstruct it from import.meta.url
 dotenv.config();
 
 // ESM (ES Modules) doesn't have __dirname — we reconstruct it from import.meta.url
@@ -34,7 +38,36 @@ const PORT = process.env.PORT || 3001;
 // Path where uploaded PDF/TXT resumes will be saved to disk
 const uploadsDir = join(__dirname, '../uploads');
 
+import rateLimit from 'express-rate-limit';
+
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+
+// Global API limiter: 100 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Chat API limiter: stricter limit to prevent OpenAI cost abuse
+const chatLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // 20 chat messages per hour per IP
+  message: { error: 'Chat quota exceeded. Please try again in an hour.' },
+});
+
+// Upload API limiter: strict limit for heavy PDF extraction
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 uploads per hour per IP
+  message: { error: 'Upload quota exceeded. Please try again in an hour.' },
+});
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
+
+app.use(globalLimiter);
 
 // Allow cross-origin requests from the React dev server (localhost:5173)
 app.use(cors());
@@ -54,11 +87,15 @@ app.use('/uploads', express.static(uploadsDir));
 // All job-related endpoints: POST/GET /api/jobs, GET /api/jobs/:id/matches
 app.use('/api/jobs', jobRoutes);
 
+// Auth endpoints
+import authRoutes from './routes/auth.js';
+app.use('/api/auth', authRoutes);
+
 // All resume endpoints: POST /api/resumes (upload), GET /api/resumes/:id
-app.use('/api/resumes', resumeRoutes);
+app.use('/api/resumes', uploadLimiter, resumeRoutes);
 
 // Chat with a resume via RAG: POST /api/chat/:resumeId
-app.use('/api/chat', chatRoutes);
+app.use('/api/chat', chatLimiter, chatRoutes);
 
 // Simplest possible health check — useful for load balancers and monitoring
 app.get('/api/health', (req, res) => {

@@ -21,15 +21,17 @@ import { unlink } from 'fs/promises';
 import { z } from 'zod';
 import { parseResume } from '../services/resumeParser.js';
 import {
-  createResume,
   updateResumeQualityScore,
   getAllResumes,
   getResume,
   deleteResume,
   reextractResumeProfile,
+  createPendingResume,
 } from '../services/neo4j/resumeService.js';
 import { storeResumeEmbeddings, deleteResumeEmbeddings } from '../services/vector/resumeVectorService.js';
 import { scoreResume } from '../services/ai/resumeScorer.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
+import { resumeQueue } from '../workers/resumeQueue.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -75,10 +77,9 @@ const router = express.Router();
 
 /**
  * POST /api/resumes
- * Accepts a single file field named "resume".
- * Returns the created resume with quality score + breakdown.
+ * Uploads file, extracts raw text, creates a pending node, and enqueues background processing.
  */
-router.post('/', upload.single('resume'), async (req, res, next) => {
+router.post('/', requireAuth, upload.single('resume'), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -88,53 +89,50 @@ router.post('/', upload.single('resume'), async (req, res, next) => {
     const fileName = req.file.originalname;
     const mimeType = req.file.mimetype;
 
-    // Step 1: Extract text from PDF or TXT
+    // Fast sync operation to get text
     const text = await parseResume(filePath, mimeType);
 
-    // Step 2: Create in Neo4j (runs GPT full profile extraction internally)
+    // Create stub node in Neo4j
     const fileUrl = `/uploads/${req.file.filename}`;
-    const resume = await createResume(fileName, fileUrl, text);
+    const id = await createPendingResume(fileName, fileUrl, text);
 
-    // Step 3: Embed (ChromaDB) + Score (GPT) IN PARALLEL — no added latency
-    const [, scoreResult] = await Promise.all([
-      storeResumeEmbeddings(resume.id, text),
-      scoreResume(text),
-    ]);
+    // Add to BullMQ Queue for AI processing
+    const job = await resumeQueue.add('process-resume', { id, text });
 
-    // Step 4: Persist the quality score on the Neo4j Resume node
-    await updateResumeQualityScore(resume.id, scoreResult.total);
-
-    res.status(201).json({
-      ...resume,
-      qualityScore: scoreResult.total,
-      scoreBreakdown: {
-        structure: scoreResult.structure,
-        specificity: scoreResult.specificity,
-        skillsDepth: scoreResult.skillsDepth,
-        readability: scoreResult.readability,
-        grade: scoreResult.grade,
-        feedback: scoreResult.feedback,
-      },
-    });
-  } catch (error) {
-    next(error); // Pass to global error handler
-  }
-});
-
-// ─── Read ──────────────────────────────────────────────────────────────────────
-
-/** GET /api/resumes — all resumes, newest first */
-router.get('/', async (req, res, next) => {
-  try {
-    const resumes = await getAllResumes();
-    res.json(resumes);
+    res.status(202).json({ id, jobId: job.id, status: 'QUEUED' });
   } catch (error) {
     next(error);
   }
 });
 
-/** GET /api/resumes/:id — single resume with full profile */
-router.get('/:id', async (req, res, next) => {
+/**
+ * GET /api/resumes/status/:id
+ * Poll for background processing status.
+ */
+router.get('/status/:id', requireAuth, async (req, res, next) => {
+  try {
+    const resume = await getResume(req.params.id);
+    if (!resume) return res.status(404).json({ error: 'Resume not found' });
+    
+    res.json({ status: resume.status || 'COMPLETED', qualityScore: resume.qualityScore });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Retrieval ────────────────────────────────────────────────────────────────
+
+// GET all resumes (Recruiter ONLY)
+router.get('/', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
+  try {
+    res.json(await getAllResumes());
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET single resume by ID (Candidate or Recruiter)
+router.get('/:id', requireAuth, async (req, res, next) => {
   try {
     const resume = await getResume(req.params.id);
     if (!resume) return res.status(404).json({ error: 'Resume not found' });
@@ -148,16 +146,10 @@ router.get('/:id', async (req, res, next) => {
 
 /**
  * DELETE /api/resumes/:id
- * Fully removes a resume:
- *   1. Delete Neo4j node + all relationships (DETACH DELETE)
- *   2. Delete ChromaDB chunks (prevents orphaned vectors)
- *   3. Delete file from disk (prevents orphaned storage)
- *
- * All three steps run in parallel via Promise.all.
- * Individual failures are logged but don't block the others.
- * Returns 204 No Content on success (REST standard for delete).
+ * Removes Neo4j node, ChromaDB embeddings, and the uploaded file from disk.
+ * Parallel execution for low latency. (Recruiter ONLY)
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -187,20 +179,10 @@ router.delete('/:id', async (req, res, next) => {
 
 /**
  * POST /api/resumes/:id/reprocess
- * Re-runs GPT extraction and scoring on an existing resume WITHOUT re-uploading.
- *
- * Use case: Initial GPT call returned poor results (few skills, missing companies).
- * The resume text is already stored in Neo4j (up to 10000 chars).
- *
- * Process:
- *   1. GET current resume from Neo4j (includes stored text)
- *   2. Clear old HAS_SKILL, WORKED_AT, HAS_DEGREE relationships
- *   3. Re-run GPT extractFullProfile → rebuild relationships
- *   4. Re-run scoreResume → update qualityScore
- *   5. Re-embed into ChromaDB (delete old + store new)
- *   6. Return the fully-updated resume
+ * Clears old extracted relationships, re-runs GPT extraction, re-scores, and re-embeds.
+ * Used when the first AI extraction failed or missed data. (Recruiter ONLY)
  */
-router.post('/:id/reprocess', async (req, res, next) => {
+router.post('/:id/reprocess', requireAuth, requireRole('RECRUITER'), async (req, res, next) => {
   try {
     const { id } = req.params;
 

@@ -29,6 +29,7 @@ import { ArrowLeft, FileText, CheckCircle, XCircle, Sparkles, BookOpen, X, Loade
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { jobApi, resumeApi, type Job, type MatchResult, type CandidateStatus } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 // ─── Modal Component ──────────────────────────────────────────────────────────
 
@@ -117,6 +118,7 @@ function MarkdownModal({
 
 export default function JobDetail() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
 
   const [job, setJob] = useState<Job | null>(null);
   const [matches, setMatches] = useState<MatchResult[]>([]);
@@ -290,6 +292,7 @@ export default function JobDetail() {
       </div>
 
       {/* Matches Section */}
+      {user?.role === 'RECRUITER' && (
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-900">Top Matching Resumes</h2>
@@ -404,6 +407,7 @@ export default function JobDetail() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
