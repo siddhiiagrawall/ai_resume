@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-import { getSession } from '../../config/neo4j.js';
+import { driver } from '../../config/neo4j.js';
 
 export type UserRole = 'RECRUITER' | 'CANDIDATE';
 
@@ -16,7 +16,7 @@ export interface User {
  * createUser — registers a new user in the Neo4j graph database.
  */
 export async function createUser(email: string, name: string, passwordPlain: string, role: UserRole): Promise<User> {
-  const session = getSession();
+  const session = driver.session();
   try {
     const passwordHash = await bcrypt.hash(passwordPlain, 10);
     const id = uuidv4();
@@ -54,7 +54,7 @@ export async function createUser(email: string, name: string, passwordPlain: str
  * verifyUser — checks email & password and returns the User if valid.
  */
 export async function verifyUser(email: string, passwordPlain: string): Promise<User | null> {
-  const session = getSession();
+  const session = driver.session();
   try {
     const query = `MATCH (u:User {email: $email}) RETURN u`;
     const result = await session.run(query, { email });
@@ -84,7 +84,7 @@ export async function verifyUser(email: string, passwordPlain: string): Promise<
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const session = getSession();
+  const session = driver.session();
   try {
     const query = `MATCH (u:User {id: $id}) RETURN u`;
     const result = await session.run(query, { id });

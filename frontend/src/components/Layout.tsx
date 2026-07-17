@@ -51,10 +51,9 @@ export default function Layout() {
                 <NavLink
                   to="/"
                   className={({ isActive }) =>
-                    `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'border-blue-500 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${isActive
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`
                   }
                 >
@@ -66,10 +65,9 @@ export default function Layout() {
                   <NavLink
                     to="/upload"
                     className={({ isActive }) =>
-                      `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'border-blue-500 text-gray-900'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${isActive
+                        ? 'border-blue-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`
                     }
                   >
@@ -82,10 +80,9 @@ export default function Layout() {
                   <NavLink
                     to="/resumes"
                     className={({ isActive }) =>
-                      `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'border-blue-500 text-gray-900'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${isActive
+                        ? 'border-blue-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`
                     }
                   >
@@ -95,7 +92,7 @@ export default function Layout() {
                 )}
               </div>
             </div>
-            
+
             {/* User Profile & Logout */}
             <div className="flex items-center space-x-4">
               <span className="text-sm font-medium text-gray-700 hidden sm:block">
@@ -112,7 +109,7 @@ export default function Layout() {
           </div>
         </div>
       </nav>
-      
+
       {/* ── Page Content ────────────────────────────────────────────────── */}
       {/* max-w-7xl + mx-auto = centered container with max width constraint */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">

@@ -1,0 +1,9 @@
+Alice Smith
+alice@smith.com
+Software Engineer
+Skills: React, Node.js, Typescript, Python, Neo4j, Redis, BullMQ
+Experience:
+- Senior Engineer at TechCorp (2020-2025). Built backend services using Node.js and Redis queues.
+- Web Developer at WebSolutions (2018-2020). Built frontends with React.
+Education:
+- BS in Computer Science, University of California

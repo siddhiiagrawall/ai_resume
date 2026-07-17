@@ -5,7 +5,7 @@ import { updateResumeConnections, updateResumeStatus } from '../services/neo4j/r
 import { storeResumeEmbeddings } from '../services/vector/resumeVectorService.js';
 import { scoreResume } from '../services/ai/resumeScorer.js';
 
-const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
+const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', { maxRetriesPerRequest: null });
 
 export const resumeQueue = new Queue('resume-processing', { connection });
 

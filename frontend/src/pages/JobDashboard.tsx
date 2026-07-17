@@ -160,8 +160,16 @@ export default function JobDashboard() {
                 )}
               </div>
               {/* Delete button — top-right corner, visible on hover */}
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {user?.role === 'RECRUITER' && (
+                <button
+                  onClick={(e) => handleDeleteJob(e, job)}
+                  disabled={deleting === job.id}
+                  className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100"
+                  aria-label="Delete job"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
             </Link>
           ))}
         </div>

@@ -217,13 +217,6 @@ export default function ResumeUpload() {
         </div>
       ) : (
         /* ── Upload Form ─────────────────────────────────────────────────────── */
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Resume File (PDF or TXT)
-            </label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors">
-              <div className="space-y-1 text-center">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <h2 className="text-xl font-bold text-gray-900 border-b pb-2 mb-6">Upload New Resume</h2>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -233,24 +226,27 @@ export default function ResumeUpload() {
               </label>
               <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
                 <div className="space-y-1 text-center">
-                  <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                  <div className="flex text-sm text-gray-600 justify-center">
-                    <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 p-1">
-                      <span>Select a file</span>
-                      <input type="file" className="sr-only" onChange={handleFileChange} accept=".pdf,.txt" />
-                    </label>
-                  </div>
-                  <p className="text-xs text-gray-500">Only PDF or TXT up to 10MB</p>
+                  {file ? (
+                    <div className="flex flex-col items-center justify-center">
+                      <FileText className="h-12 w-12 text-blue-500 mb-2" />
+                      <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                      <button type="button" onClick={() => setFile(null)} className="mt-2 text-xs text-red-500 hover:text-red-700">Remove</button>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                      <div className="flex text-sm text-gray-600 justify-center">
+                        <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 p-1">
+                          <span>Select a file</span>
+                          <input type="file" className="sr-only" onChange={handleFileChange} accept=".pdf,.txt" />
+                        </label>
+                      </div>
+                      <p className="text-xs text-gray-500">Only PDF or TXT up to 10MB</p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
-
-            {file && (
-              <div className="flex items-center p-3 text-sm bg-blue-50 border border-blue-200 text-blue-700 rounded-md">
-                <FileText className="w-4 h-4 mr-2 text-blue-500" />
-                <span className="font-medium truncate">{file.name}</span>
-              </div>
-            )}
 
             {error && (
               <div className="text-red-600 text-sm p-3 bg-red-50 border border-red-200 rounded-md">

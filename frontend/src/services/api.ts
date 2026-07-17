@@ -254,3 +254,17 @@ export const chatApi = {
     return response.data;
   },
 };
+
+// ─── Auth API ──────────────────────────────────────────────────────────────────
+
+export const authApi = {
+  login: async (credentials: any) => {
+    const response = await api.post<{ token: string, user: any }>('/auth/login', credentials);
+    return response.data;
+  },
+  
+  register: async (credentials: any) => {
+    const response = await api.post<{ token: string, user: any }>('/auth/register', credentials);
+    return response.data;
+  }
+};
